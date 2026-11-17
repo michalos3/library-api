@@ -93,7 +93,7 @@ Errors are returned as `{"error": "...", "details": {...}}`:
 |--------|-------------------------------------------------------------------------------|
 | `400`  | Required parameter missing (e.g. `card_number` when borrowing)                |
 | `404`  | Unknown book or reader                                                        |
-| `409`  | Invalid state change: borrowing a borrowed book, returning an available book, deleting a borrowed book |
+| `409`  | Invalid state change: borrowing a borrowed book, returning an available book, deleting a borrowed book. Also a duplicate created by a concurrent request (caught by the unique index, not the validation) |
 | `422`  | Validation errors (format, uniqueness, blank fields) or an unknown status     |
 
 ## Return reminders
@@ -124,8 +124,9 @@ body) is written to the log by a small custom delivery method
   exists, so status and history cannot drift apart.
 - **The database enforces the rules.** A partial unique index
   (`book_id WHERE returned_at IS NULL`) guarantees at most one active loan per
-  book even under concurrent requests. Borrow/return also take a row lock on the
-  book. Six-digit identifiers and `returned_at >= borrowed_at` are additionally
+  book even under concurrent requests. Borrow, return and delete all take a row
+  lock on the book, so a delete cannot race with a borrow and remove a book that
+  was just lent. Six-digit identifiers and `returned_at >= borrowed_at` are additionally
   enforced with check constraints, and emails are normalized (trimmed,
   lowercased) so their uniqueness is case-insensitive.
 - **Status change as a sub-resource.** `PATCH /books/:serial_number/status`
@@ -139,7 +140,10 @@ body) is written to the log by a small custom delivery method
   `due_today_reminder_sent_at`. The job claims a reminder with an atomic
   conditional `UPDATE` before enqueueing the email, so a retried, manually
   triggered or duplicated run never sends the same reminder twice. Emails are
-  delivered via `deliver_later`, which retries delivery failures.
+  delivered via `deliver_later` on `ReminderDeliveryJob`, which retries failed
+  deliveries with backoff (the stock mail job does not retry). Because a
+  reminder is marked as sent when it is enqueued, one that fails on every
+  attempt stays in Solid Queue's failed jobs and is not picked up by the next run.
 - **Solid Queue instead of Sidekiq/cron.** Jobs and the schedule are stored in
   PostgreSQL, so the stack is just two containers. The Solid Queue tables live
   in the main database (a regular migration) rather than in the separate
@@ -175,7 +179,7 @@ body) is written to the log by a small custom delivery method
 app/models/            Book, Reader, Borrowing (domain rules: borrow!/return!)
 app/controllers/api/v1 Books, BookStatuses, Readers + shared error handling
 app/serializers/       JSON representation
-app/jobs/              ReturnRemindersJob
+app/jobs/              ReturnRemindersJob, ReminderDeliveryJob (mail delivery with retries)
 app/mailers/           ReminderMailer (+ text templates in app/views)
 config/recurring.yml   Daily reminder schedule
 spec/                  Model, request, job and mailer specs; mailer previews

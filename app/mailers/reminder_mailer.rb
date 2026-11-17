@@ -1,4 +1,6 @@
 class ReminderMailer < ApplicationMailer
+  self.delivery_job = ReminderDeliveryJob
+
   # Sent DUE_SOON_NOTICE (3 days) before the due date.
   def due_soon(borrowing)
     @borrowing = borrowing

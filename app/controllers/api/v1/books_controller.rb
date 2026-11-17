@@ -11,8 +11,6 @@ module Api
 
       # GET /api/v1/books/:serial_number
       def show
-        book = Book.includes(borrowings: :reader).find_by!(serial_number: params[:serial_number])
-
         render json: BookSerializer.new(book).as_json(with_history: true)
       end
 
@@ -25,8 +23,6 @@ module Api
 
       # DELETE /api/v1/books/:serial_number
       def destroy
-        book = Book.find_by!(serial_number: params[:serial_number])
-
         if book.destroy
           head :no_content
         else
@@ -35,6 +31,10 @@ module Api
       end
 
       private
+
+      def book
+        @book ||= Book.find_by!(serial_number: params[:serial_number])
+      end
 
       def book_params
         params.expect(book: %i[serial_number title author])

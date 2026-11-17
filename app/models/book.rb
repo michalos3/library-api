@@ -54,6 +54,9 @@ class Book < ApplicationRecord
   end
 
   def ensure_not_borrowed
+    # Take the same row lock as borrow!/return! (and reload), so a concurrent
+    # borrow cannot slip in between this check and the delete.
+    lock!
     return unless borrowed?
 
     errors.add(:base, "cannot delete a book that is currently borrowed")

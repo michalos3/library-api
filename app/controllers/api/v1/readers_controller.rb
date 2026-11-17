@@ -8,8 +8,6 @@ module Api
 
       # GET /api/v1/readers/:card_number
       def show
-        reader = Reader.find_by!(card_number: params[:card_number])
-
         render json: ReaderSerializer.new(reader).as_json
       end
 
@@ -21,6 +19,10 @@ module Api
       end
 
       private
+
+      def reader
+        @reader ||= Reader.find_by!(card_number: params[:card_number])
+      end
 
       def reader_params
         params.expect(reader: %i[card_number full_name email])

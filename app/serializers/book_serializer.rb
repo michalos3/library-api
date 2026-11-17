@@ -23,6 +23,6 @@ class BookSerializer
   end
 
   def history
-    @book.borrowings.sort_by(&:borrowed_at).reverse.map { |b| BorrowingSerializer.new(b).as_json }
+    @book.borrowings.includes(:reader).order(borrowed_at: :desc).map { |b| BorrowingSerializer.new(b).as_json }
   end
 end

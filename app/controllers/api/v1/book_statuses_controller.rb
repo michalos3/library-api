@@ -7,11 +7,8 @@ module Api
     #   { "status": "available" }
     class BookStatusesController < BaseController
       def update
-        book = Book.find_by!(serial_number: params[:book_serial_number])
-
         case params.require(:status)
         when "borrowed"
-          reader = Reader.find_by!(card_number: params.require(:card_number))
           book.borrow!(reader)
         when "available"
           book.return!
@@ -20,6 +17,16 @@ module Api
         end
 
         render json: BookSerializer.new(book.reload).as_json
+      end
+
+      private
+
+      def book
+        @book ||= Book.find_by!(serial_number: params[:book_serial_number])
+      end
+
+      def reader
+        @reader ||= Reader.find_by!(card_number: params.require(:card_number))
       end
     end
   end

@@ -24,4 +24,28 @@ RSpec.describe ReminderMailer do
       expect(mail.body.encoded).to include("due today (2026-01-31)")
     end
   end
+
+  describe "delivery with deliver_later" do
+    it "retries a failed delivery, so a mail server outage does not lose the reminder" do
+      allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_raise(IOError, "mail server is down")
+      described_class.due_today(borrowing).deliver_later
+      perform_enqueued_jobs # the first attempt fails
+
+      allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_call_original
+      perform_enqueued_jobs # the retry, with the mail server back up
+
+      expect(ActionMailer::Base.deliveries.map(&:to)).to eq([ [ "jane@example.com" ] ])
+      expect(enqueued_jobs).to be_empty
+    end
+
+    it "drops the reminder when the loan no longer exists" do
+      described_class.due_today(borrowing).deliver_later
+      borrowing.delete
+
+      perform_enqueued_jobs
+
+      expect(ActionMailer::Base.deliveries).to be_empty
+      expect(enqueued_jobs).to be_empty
+    end
+  end
 end

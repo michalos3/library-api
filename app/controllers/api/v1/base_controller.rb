@@ -9,6 +9,12 @@ module Api
         render_error :unprocessable_content, "Validation failed", e.record.errors.to_hash(true)
       end
 
+      # A duplicate that got past the uniqueness validation (two concurrent
+      # requests) and was rejected by the unique index.
+      rescue_from ActiveRecord::RecordNotUnique do
+        render_error :conflict, "A record with the same unique value already exists"
+      end
+
       rescue_from ActionController::ParameterMissing do |e|
         render_error :bad_request, e.message
       end

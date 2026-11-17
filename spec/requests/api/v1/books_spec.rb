@@ -71,6 +71,19 @@ RSpec.describe "Books API" do
       expect(response).to have_http_status(:not_found)
       expect(json["error"]).to eq("Book not found")
     end
+
+    it "does not run a query per history entry" do
+      book = create(:book, serial_number: "000001")
+      create_list(:borrowing, 3, :returned, book: book)
+      book.borrow!(reader)
+
+      queries = []
+      callback = ->(*, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { get "/api/v1/books/000001" }
+
+      expect(json["borrowings"].size).to eq(4)
+      expect(queries.size).to be <= 5
+    end
   end
 
   describe "POST /api/v1/books" do
@@ -102,6 +115,20 @@ RSpec.describe "Books API" do
       post "/api/v1/books", params: {}, as: :json
 
       expect(response).to have_http_status(:bad_request)
+    end
+
+    it "returns 409 when a concurrent request has just created the same book" do
+      create(:book, serial_number: "123456")
+      # Losing the race: the uniqueness validation ran before the other request
+      # committed, so only the unique index sees the duplicate.
+      allow_any_instance_of(ActiveRecord::Validations::UniquenessValidator).to receive(:validate_each)
+
+      post "/api/v1/books", params: { book: { serial_number: "123456", title: "Eloquent Ruby", author: "Russ Olsen" } },
+                            as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(json["error"]).to be_present
+      expect(Book.where(serial_number: "123456").count).to eq(1)
     end
   end
 

@@ -91,5 +91,14 @@ RSpec.describe Book do
       expect(book.errors[:base]).to include("cannot delete a book that is currently borrowed")
       expect(Borrowing.count).to eq(1)
     end
+
+    it "re-checks the status under a row lock, so a concurrent borrow is not deleted with the book" do
+      stale_copy = Book.find(book.id)
+      expect(stale_copy).not_to be_borrowed # status read before the concurrent borrow commits
+      book.borrow!(reader)
+
+      expect(stale_copy.destroy).to be(false)
+      expect(Borrowing.count).to eq(1)
+    end
   end
 end

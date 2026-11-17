@@ -31,4 +31,25 @@ RSpec.describe "Readers API" do
     get "/api/v1/readers/100002"
     expect(response.parsed_body["card_number"]).to eq("100002")
   end
+
+  it "returns 404 for an unknown reader" do
+    get "/api/v1/readers/999999"
+
+    expect(response).to have_http_status(:not_found)
+    expect(json["error"]).to eq("Reader not found")
+  end
+
+  it "returns 409 when a concurrent request has just created a reader with the same email" do
+    create(:reader, email: "jane@example.com")
+    # Losing the race: the uniqueness validation ran before the other request
+    # committed, so only the unique index sees the duplicate.
+    allow_any_instance_of(ActiveRecord::Validations::UniquenessValidator).to receive(:validate_each)
+
+    post "/api/v1/readers", params: { reader: { card_number: "100009", full_name: "Jane", email: "jane@example.com" } },
+                            as: :json
+
+    expect(response).to have_http_status(:conflict)
+    expect(json["error"]).to be_present
+    expect(Reader.where(email: "jane@example.com").count).to eq(1)
+  end
 end
