@@ -40,6 +40,57 @@ RSpec.describe "Books API" do
       expect(json["error"]).to eq("status must be one of: available, borrowed")
     end
 
+    it "returns the first 25 books by default and describes the pages in headers" do
+      create_list(:book, 30)
+
+      get "/api/v1/books"
+
+      expect(json.size).to eq(25)
+      expect(response.headers.to_h).to include(
+        "x-total-count" => "30", "x-total-pages" => "2", "x-page" => "1", "x-per-page" => "25"
+      )
+    end
+
+    it "returns the requested page" do
+      (1..30).each { |n| create(:book, serial_number: format("%06d", n)) }
+
+      get "/api/v1/books", params: { page: 2, per_page: 10 }
+
+      expect(json.pluck("serial_number")).to eq((11..20).map { |n| format("%06d", n) })
+      expect(response.headers["x-total-pages"]).to eq("3")
+    end
+
+    it "returns an empty list past the last page" do
+      create_list(:book, 3)
+
+      get "/api/v1/books", params: { page: 99_999_999_999 }
+
+      expect(response).to have_http_status(:ok)
+      expect(json).to eq([])
+      expect(response.headers["x-total-count"]).to eq("3")
+    end
+
+    it "caps per_page at 100 and falls back to defaults for invalid values" do
+      create_list(:book, 101)
+
+      get "/api/v1/books", params: { per_page: 500 }
+      expect(response.parsed_body.size).to eq(100)
+
+      get "/api/v1/books", params: { page: "abc", per_page: "-5" }
+      expect(response.parsed_body.size).to eq(25)
+      expect(response.headers["x-page"]).to eq("1")
+    end
+
+    it "paginates within the status filter" do
+      create_list(:book, 3).each { |book| book.borrow!(create(:reader)) }
+      create_list(:book, 2)
+
+      get "/api/v1/books", params: { status: "borrowed", per_page: 2 }
+
+      expect(json.size).to eq(2)
+      expect(response.headers["x-total-count"]).to eq("3")
+    end
+
     it "does not run a query per book" do
       create_list(:book, 3).each { |book| book.borrow!(create(:reader)) }
 
@@ -47,7 +98,7 @@ RSpec.describe "Books API" do
       callback = ->(*, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
       ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { get "/api/v1/books" }
 
-      expect(queries.size).to be <= 3
+      expect(queries.size).to be <= 4 # count + books + borrowings + readers
     end
   end
 

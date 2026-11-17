@@ -1,9 +1,9 @@
 module Api
   module V1
     class ReadersController < BaseController
-      # GET /api/v1/readers
+      # GET /api/v1/readers?page=1&per_page=25
       def index
-        render json: Reader.order(:card_number).map { |reader| ReaderSerializer.new(reader).as_json }
+        render json: paginate(Reader.order(:card_number)).map { |reader| ReaderSerializer.new(reader).as_json }
       end
 
       # GET /api/v1/readers/:card_number

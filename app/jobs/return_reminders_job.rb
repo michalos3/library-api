@@ -12,8 +12,8 @@ class ReturnRemindersJob < ApplicationJob
   retry_on StandardError, wait: :polynomially_longer, attempts: 5
 
   REMINDERS = {
-    due_soon: { column: :due_soon_reminder_sent_at, days_before_due: Borrowing::DUE_SOON_NOTICE },
-    due_today: { column: :due_today_reminder_sent_at, days_before_due: 0.days }
+    due_soon: { column: :due_soon_reminder_enqueued_at, days_before_due: Borrowing::DUE_SOON_NOTICE },
+    due_today: { column: :due_today_reminder_enqueued_at, days_before_due: 0.days }
   }.freeze
 
   def perform(date = Date.current)

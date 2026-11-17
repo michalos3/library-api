@@ -14,7 +14,7 @@ RSpec.describe ReturnRemindersJob do
 
     expect { described_class.perform_now }
       .to have_enqueued_mail(ReminderMailer, :due_soon).with(borrowing)
-    expect(borrowing.reload.due_soon_reminder_sent_at).to be_present
+    expect(borrowing.reload.due_soon_reminder_enqueued_at).to be_present
   end
 
   it "sends a reminder on the due date" do
@@ -22,7 +22,7 @@ RSpec.describe ReturnRemindersJob do
 
     expect { described_class.perform_now }
       .to have_enqueued_mail(ReminderMailer, :due_today).with(borrowing)
-    expect(borrowing.reload.due_today_reminder_sent_at).to be_present
+    expect(borrowing.reload.due_today_reminder_enqueued_at).to be_present
   end
 
   it "does not remind about other due dates or returned books" do

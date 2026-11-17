@@ -32,6 +32,15 @@ RSpec.describe "Readers API" do
     expect(response.parsed_body["card_number"]).to eq("100002")
   end
 
+  it "paginates the list of readers" do
+    (1..5).each { |n| create(:reader, card_number: format("2000%02d", n)) }
+
+    get "/api/v1/readers", params: { page: 2, per_page: 2 }
+
+    expect(json.pluck("card_number")).to eq(%w[200003 200004])
+    expect(response.headers.to_h).to include("x-total-count" => "5", "x-total-pages" => "3")
+  end
+
   it "returns 404 for an unknown reader" do
     get "/api/v1/readers/999999"
 

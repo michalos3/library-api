@@ -1,7 +1,7 @@
 module Api
   module V1
     class BooksController < BaseController
-      # GET /api/v1/books?status=available|borrowed
+      # GET /api/v1/books?status=available|borrowed&page=1&per_page=25
       def index
         books = Book.includes(current_borrowing: :reader).order(:serial_number)
         if params[:status].present?
@@ -10,7 +10,7 @@ module Api
           books = books.public_send(params[:status])
         end
 
-        render json: books.map { |book| BookSerializer.new(book).as_json }
+        render json: paginate(books).map { |book| BookSerializer.new(book).as_json }
       end
 
       # GET /api/v1/books/:serial_number

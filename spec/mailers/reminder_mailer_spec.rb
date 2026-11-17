@@ -38,6 +38,15 @@ RSpec.describe ReminderMailer do
       expect(enqueued_jobs).to be_empty
     end
 
+    it "does not email a reader who returned the book while the reminder was waiting in the queue" do
+      described_class.due_today(borrowing).deliver_later
+      book.return!
+
+      perform_enqueued_jobs
+
+      expect(ActionMailer::Base.deliveries).to be_empty
+    end
+
     it "drops the reminder when the loan no longer exists" do
       described_class.due_today(borrowing).deliver_later
       borrowing.delete

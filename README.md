@@ -29,12 +29,12 @@ and preserved (`000001` is a valid serial number).
 
 | Method   | Path                                   | Description                                                 |
 |----------|----------------------------------------|-------------------------------------------------------------|
-| `GET`    | `/api/v1/books`                        | List all books with their status (`?status=available\|borrowed` filters) |
+| `GET`    | `/api/v1/books`                        | List books with their status (`?status=available\|borrowed` filters), paginated |
 | `GET`    | `/api/v1/books/:serial_number`         | Book details with the full borrowing history                |
 | `POST`   | `/api/v1/books`                        | Add a book                                                  |
 | `DELETE` | `/api/v1/books/:serial_number`         | Delete a book                                               |
 | `PATCH`  | `/api/v1/books/:serial_number/status`  | Change status: borrow or return                             |
-| `GET`    | `/api/v1/readers`                      | List readers                                                |
+| `GET`    | `/api/v1/readers`                      | List readers, paginated                                     |
 | `GET`    | `/api/v1/readers/:card_number`         | Reader details                                              |
 | `POST`   | `/api/v1/readers`                      | Add a reader                                                |
 
@@ -87,6 +87,18 @@ curl localhost:3000/api/v1/books/000001
 
 The list endpoint returns the same shape without `borrowings`.
 
+### Pagination
+
+Both list endpoints take `?page=` (default 1) and `?per_page=` (default 25,
+maximum 100). The body stays a plain JSON array. The collection is described in
+the response headers `X-Total-Count`, `X-Total-Pages`, `X-Page` and
+`X-Per-Page`. A page past the end returns an empty array, and invalid values
+fall back to the defaults.
+
+```bash
+curl -i 'localhost:3000/api/v1/books?status=borrowed&page=2&per_page=10'
+```
+
 ### Errors
 
 Errors are returned as `{"error": "...", "details": {...}}`:
@@ -138,16 +150,20 @@ body) is written to the log by a small custom delivery method
 - **`due_on` is stored, not computed.** It is set when the book is lent
   (`borrowed_at` date + 30 days). Old loans keep their original due date if
   the loan period changes, and the reminder query is a plain indexed lookup.
-- **Reminders are idempotent.** Each borrowing has `due_soon_reminder_sent_at` /
-  `due_today_reminder_sent_at`. The job claims a reminder with an atomic
+- **Reminders are idempotent.** Each borrowing has `due_soon_reminder_enqueued_at` /
+  `due_today_reminder_enqueued_at`. The job claims a reminder with an atomic
   conditional `UPDATE` before enqueueing the email, so a retried, manually
-  triggered or duplicated run never sends the same reminder twice. The claim
+  triggered or duplicated run never enqueues the same reminder twice. The claim
   and the enqueue share one transaction, and the job itself is retried with
-  backoff, so a run that fails midway does not lose reminders. Emails are
-  delivered via `deliver_later` on `ReminderDeliveryJob`, which retries failed
-  deliveries with backoff (the stock mail job does not retry). Because a
-  reminder is marked as sent when it is enqueued, one that fails on every
-  attempt stays in Solid Queue's failed jobs and is not picked up by the next run.
+  backoff, so a run that fails midway does not lose reminders.
+- **Enqueued is not delivered.** The columns record that a reminder was put on
+  the queue, which is all the job can guarantee. Delivery happens later in
+  `ReminderDeliveryJob`, which retries failures with backoff (the stock mail job
+  does not retry) and re-checks the loan first: a book returned in the meantime
+  gets no email. Delivery is therefore at-least-once: a worker that crashes
+  right after sending could send the same email again on retry. A reminder that
+  fails on every attempt stays in Solid Queue's failed jobs for manual retry
+  and is not picked up by the next daily run.
 - **Solid Queue instead of Sidekiq/cron.** Jobs and the schedule are stored in
   PostgreSQL, so the stack is just two containers. The Solid Queue tables live
   in the main database (a regular migration) rather than in the separate
@@ -156,8 +172,8 @@ body) is written to the log by a small custom delivery method
   is on loan. Readers with history cannot be deleted (no endpoint either).
 - **Readers endpoints** (create/list/show) go beyond the brief. They are needed
   to lend a book to someone.
-- No serializer or pagination gems: three small serializer classes are enough
-  at this size.
+- No serializer or pagination gems: three small serializer classes and one
+  `paginate` helper in the base controller are enough at this size.
 
 ## Limitations and ideas for improvement
 
@@ -170,7 +186,7 @@ body) is written to the log by a small custom delivery method
   product decision.
 - **Overdue books** get no further reminders. A natural next step is a recurring
   overdue notice and an `?overdue=true` filter.
-- **Pagination** for `GET /books`, plus search by title/author.
+- **Search** by title/author for `GET /books`.
 - **Soft delete** (or archiving) of books, if the borrowing history needs to be
   kept for reporting after a book is written off.
 - **Real email delivery** (SMTP/SES) and a production Docker image. The compose
@@ -186,5 +202,7 @@ app/serializers/       JSON representation
 app/jobs/              ReturnRemindersJob, ReminderDeliveryJob (mail delivery with retries)
 app/mailers/           ReminderMailer (+ text templates in app/views)
 config/recurring.yml   Daily reminder schedule
-spec/                  Model, request, job and mailer specs; mailer previews
+spec/                  Model, request, job and mailer specs; mailer previews;
+                       spec/concurrency (real parallel connections) and
+                       spec/integration (real Solid Queue adapter)
 ```
