@@ -196,7 +196,8 @@ body) is written to the log by a small custom delivery method
 ## Project layout
 
 ```
-app/models/            Book, Reader, Borrowing (domain rules: borrow!/return!)
+app/models/            Book, Reader, Borrowing; Book::Lendable holds the lending rules
+                       (status, borrow!/return!, delete guard)
 app/controllers/api/v1 Books, BookStatuses, Readers + shared error handling
 app/serializers/       JSON representation
 app/jobs/              ReturnRemindersJob, ReminderDeliveryJob (mail delivery with retries)

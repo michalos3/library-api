@@ -1,0 +1,70 @@
+# Lending rules for a book: its status, borrowing, returning and the guard
+# against deleting a book that is on loan.
+#
+# A book has at most one active (not returned) borrowing. Every operation that
+# depends on that takes a row lock on the book, so they cannot interleave; the
+# partial unique index on borrowings is the last line of defence.
+module Book::Lendable
+  extend ActiveSupport::Concern
+
+  class StatusError < StandardError; end
+  class AlreadyBorrowed < StatusError; end
+  class NotBorrowed < StatusError; end
+
+  STATUSES = %w[available borrowed].freeze
+
+  included do
+    has_one :current_borrowing, -> { active }, class_name: "Borrowing", inverse_of: :book
+
+    before_destroy :ensure_not_borrowed, prepend: true
+
+    scope :borrowed, -> { where(id: Borrowing.active.select(:book_id)) }
+    scope :available, -> { where.not(id: Borrowing.active.select(:book_id)) }
+  end
+
+  def borrowed?
+    current_borrowing.present?
+  end
+
+  def status
+    borrowed? ? "borrowed" : "available"
+  end
+
+  def borrow!(reader, at: Time.current)
+    with_lock do
+      raise AlreadyBorrowed, "Book #{serial_number} is already borrowed" if borrowed?
+
+      borrowings.create!(reader: reader, borrowed_at: at).tap { reset_current_borrowing }
+    end
+  rescue ActiveRecord::RecordNotUnique
+    # Lost a race with a concurrent request (guarded by the partial unique index).
+    raise AlreadyBorrowed, "Book #{serial_number} is already borrowed"
+  end
+
+  def return!(at: Time.current)
+    with_lock do
+      borrowing = current_borrowing
+      raise NotBorrowed, "Book #{serial_number} is not borrowed" unless borrowing
+
+      borrowing.update!(returned_at: at)
+      reset_current_borrowing
+      borrowing
+    end
+  end
+
+  private
+
+  def reset_current_borrowing
+    association(:current_borrowing).reset
+  end
+
+  def ensure_not_borrowed
+    # Take the same row lock as borrow!/return! (and reload), so a concurrent
+    # borrow cannot slip in between this check and the delete.
+    lock!
+    return unless borrowed?
+
+    errors.add(:base, "cannot delete a book that is currently borrowed")
+    throw :abort
+  end
+end
