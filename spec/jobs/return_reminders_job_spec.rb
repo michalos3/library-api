@@ -42,6 +42,18 @@ RSpec.describe ReturnRemindersJob do
     expect { 2.times { described_class.perform_now } }.to have_enqueued_mail.exactly(2).times
   end
 
+  it "retries a run that failed midway without losing the reminder" do
+    borrowing = borrowing_due_on(today)
+    allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_raise(IOError, "queue is down")
+    described_class.perform_later
+    perform_enqueued_jobs(only: described_class) # the first run fails while enqueueing the email
+
+    allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_call_original
+
+    expect { perform_enqueued_jobs(only: described_class) } # the retry
+      .to have_enqueued_mail(ReminderMailer, :due_today).with(borrowing)
+  end
+
   it "accepts the date to process" do
     borrowing = borrowing_due_on(today + 10)
 

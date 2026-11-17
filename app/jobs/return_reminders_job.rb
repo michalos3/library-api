@@ -3,9 +3,13 @@
 #
 # Each reminder is "claimed" with an atomic conditional UPDATE before the email
 # is enqueued, so running the job twice on the same day (a retry, a manual run,
-# two schedulers) never sends the same reminder twice.
+# two schedulers) never sends the same reminder twice. The claim and the enqueue
+# share a transaction (Solid Queue lives in the same database), so a run that
+# fails midway rolls the claim back and the retry sends that reminder.
 class ReturnRemindersJob < ApplicationJob
   queue_as :default
+
+  retry_on StandardError, wait: :polynomially_longer, attempts: 5
 
   REMINDERS = {
     due_soon: { column: :due_soon_reminder_sent_at, days_before_due: Borrowing::DUE_SOON_NOTICE },
@@ -17,9 +21,9 @@ class ReturnRemindersJob < ApplicationJob
       due_on = date + config[:days_before_due]
 
       Borrowing.active.where(due_on: due_on, config[:column] => nil).find_each do |borrowing|
-        next unless claim(borrowing, config[:column])
-
-        ReminderMailer.public_send(kind, borrowing).deliver_later
+        Borrowing.transaction do
+          ReminderMailer.public_send(kind, borrowing).deliver_later if claim(borrowing, config[:column])
+        end
       end
     end
   end

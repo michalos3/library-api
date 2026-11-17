@@ -6,6 +6,9 @@ module Api
     #   { "status": "borrowed", "card_number": "100001" }
     #   { "status": "available" }
     class BookStatusesController < BaseController
+      # An unknown book is a 404 even when the request body is invalid.
+      before_action :book
+
       def update
         case params.require(:status)
         when "borrowed"
@@ -13,7 +16,7 @@ module Api
         when "available"
           book.return!
         else
-          return render_error(:unprocessable_content, "status must be one of: #{Book::STATUSES.join(', ')}")
+          return render_unknown_status
         end
 
         render json: BookSerializer.new(book.reload).as_json

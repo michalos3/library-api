@@ -4,7 +4,11 @@ module Api
       # GET /api/v1/books?status=available|borrowed
       def index
         books = Book.includes(current_borrowing: :reader).order(:serial_number)
-        books = books.public_send(params[:status]) if Book::STATUSES.include?(params[:status])
+        if params[:status].present?
+          return render_unknown_status unless Book::STATUSES.include?(params[:status])
+
+          books = books.public_send(params[:status])
+        end
 
         render json: books.map { |book| BookSerializer.new(book).as_json }
       end

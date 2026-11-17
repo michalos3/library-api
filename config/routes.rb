@@ -7,6 +7,9 @@ Rails.application.routes.draw do
         resource :status, only: :update, controller: "book_statuses"
       end
       resources :readers, only: %i[index show create], param: :card_number
+
+      # Unknown API paths get the same JSON error format as everything else.
+      match "*unmatched", to: "errors#not_found", via: :all
     end
   end
 end

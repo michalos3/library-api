@@ -31,6 +31,15 @@ RSpec.describe "Books API" do
       expect(json.pluck("serial_number")).to eq([ "000002" ])
     end
 
+    it "rejects an unknown status filter" do
+      create(:book, serial_number: "000001")
+
+      get "/api/v1/books", params: { status: "lost" }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(json["error"]).to eq("status must be one of: available, borrowed")
+    end
+
     it "does not run a query per book" do
       create_list(:book, 3).each { |book| book.borrow!(create(:reader)) }
 

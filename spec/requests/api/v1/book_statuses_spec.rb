@@ -72,4 +72,12 @@ RSpec.describe "Book status API" do
 
     expect(response).to have_http_status(:not_found)
   end
+
+  it "returns 404 for an unknown book even when the request body is invalid" do
+    patch "/api/v1/books/999999/status", params: { status: "lost" }, as: :json
+    expect(response).to have_http_status(:not_found)
+
+    patch "/api/v1/books/999999/status", params: {}, as: :json
+    expect(response).to have_http_status(:not_found)
+  end
 end

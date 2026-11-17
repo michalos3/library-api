@@ -24,6 +24,8 @@ docker compose run --rm -e RAILS_ENV=test web bash -c "bin/rails db:prepare && b
 
 Books and readers are addressed by their natural, staff-facing identifiers:
 the six-digit **serial number** and **library card number**, not database ids.
+Both are stored as strings of exactly six digits, so leading zeros are allowed
+and preserved (`000001` is a valid serial number).
 
 | Method   | Path                                   | Description                                                 |
 |----------|----------------------------------------|-------------------------------------------------------------|
@@ -91,10 +93,10 @@ Errors are returned as `{"error": "...", "details": {...}}`:
 
 | Status | When                                                                          |
 |--------|-------------------------------------------------------------------------------|
-| `400`  | Required parameter missing (e.g. `card_number` when borrowing)                |
-| `404`  | Unknown book or reader                                                        |
+| `400`  | Required parameter missing (e.g. `card_number` when borrowing), malformed JSON body, null byte in a parameter |
+| `404`  | Unknown book, reader or API path                                              |
 | `409`  | Invalid state change: borrowing a borrowed book, returning an available book, deleting a borrowed book. Also a duplicate created by a concurrent request (caught by the unique index, not the validation) |
-| `422`  | Validation errors (format, uniqueness, blank fields) or an unknown status     |
+| `422`  | Validation errors (format, uniqueness, blank fields) or an unknown status (also in the `?status=` filter) |
 
 ## Return reminders
 
@@ -139,7 +141,9 @@ body) is written to the log by a small custom delivery method
 - **Reminders are idempotent.** Each borrowing has `due_soon_reminder_sent_at` /
   `due_today_reminder_sent_at`. The job claims a reminder with an atomic
   conditional `UPDATE` before enqueueing the email, so a retried, manually
-  triggered or duplicated run never sends the same reminder twice. Emails are
+  triggered or duplicated run never sends the same reminder twice. The claim
+  and the enqueue share one transaction, and the job itself is retried with
+  backoff, so a run that fails midway does not lose reminders. Emails are
   delivered via `deliver_later` on `ReminderDeliveryJob`, which retries failed
   deliveries with backoff (the stock mail job does not retry). Because a
   reminder is marked as sent when it is enqueued, one that fails on every

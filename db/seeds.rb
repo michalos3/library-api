@@ -1,6 +1,10 @@
 # Sample data so the API can be explored right after `docker compose up`.
 # Idempotent - safe to run more than once.
 
+# `db:prepare` seeds a freshly created database, which in CI is the test one.
+# Specs build their own data, so sample records must never end up there.
+return if Rails.env.test?
+
 readers = [
   { card_number: "100001", full_name: "Jane Doe", email: "jane.doe@example.com" },
   { card_number: "100002", full_name: "John Smith", email: "john.smith@example.com" },
