@@ -7,7 +7,7 @@ module Api
         if params[:status].present?
           return render_unknown_status unless Book::STATUSES.include?(params[:status])
 
-          books = books.public_send(params[:status])
+          books = params[:status] == "borrowed" ? books.borrowed : books.available
         end
 
         render json: paginate(books).map { |book| BookSerializer.new(book).as_json }
