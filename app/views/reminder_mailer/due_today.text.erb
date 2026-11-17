@@ -1,0 +1,9 @@
+Dear <%= @borrowing.reader.full_name %>,
+
+The book you borrowed on <%= @borrowing.borrowed_at.to_date %> is due today (<%= @borrowing.due_on %>):
+
+  "<%= @borrowing.book.title %>" by <%= @borrowing.book.author %> (serial no. <%= @borrowing.book.serial_number %>)
+
+Please return it to the library today.
+
+Your Library

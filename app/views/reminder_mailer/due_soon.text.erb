@@ -1,0 +1,10 @@
+Dear <%= @borrowing.reader.full_name %>,
+
+This is a friendly reminder that the book you borrowed on <%= @borrowing.borrowed_at.to_date %>
+is due in 3 days, on <%= @borrowing.due_on %>:
+
+  "<%= @borrowing.book.title %>" by <%= @borrowing.book.author %> (serial no. <%= @borrowing.book.serial_number %>)
+
+Please return it to the library by the due date.
+
+Your Library

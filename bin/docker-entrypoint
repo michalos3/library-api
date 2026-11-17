@@ -1,0 +1,11 @@
+#!/bin/bash -e
+
+# A pid file left over from a previous container run would block Puma.
+rm -f tmp/pids/server.pid
+
+# Create/migrate the database (and seed it on first creation) when booting the server.
+if [ "$1" == "bin/rails" ] && [ "$2" == "server" ]; then
+  bin/rails db:prepare
+fi
+
+exec "$@"
