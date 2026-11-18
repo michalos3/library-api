@@ -159,8 +159,10 @@ body) is written to the log by a small custom delivery method
 - **Enqueued is not delivered.** The columns record that a reminder was put on
   the queue, which is all the job can guarantee. Delivery happens later in
   `ReminderDeliveryJob`, which retries failures with backoff (the stock mail job
-  does not retry) and re-checks the loan first: a book returned in the meantime
-  gets no email. Delivery is therefore at-least-once: a worker that crashes
+  does not retry) and re-checks the loan right before sending, so a book
+  returned while the reminder waited in the queue normally gets no email. The
+  check and the send are not atomic: a return in the short window between them
+  can still be followed by a reminder. Delivery is also at-least-once: a worker that crashes
   right after sending could send the same email again on retry. A reminder that
   fails on every attempt stays in Solid Queue's failed jobs for manual retry
   and is not picked up by the next daily run.
